@@ -8,6 +8,9 @@ const slotData = {
 };
 
 const timeOrder = Object.keys(slotData);
+const initialSlotInputs = Object.fromEntries(
+  timeOrder.map((time) => [time, slotData[time].join(",")]),
+);
 
 function buildSectionNames(numberOfSections) {
   return Array.from({ length: numberOfSections }, (_, index) => `Section ${index + 1}`);
@@ -32,11 +35,24 @@ function getRowTone(total, average) {
   return "row-off";
 }
 
-function balanceLoad(numberOfSections) {
+function parseSlotInput(value) {
+  return value
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isFinite(item) && item > 0);
+}
+
+function buildSlotData(slotInputs) {
+  return Object.fromEntries(
+    timeOrder.map((time) => [time, parseSlotInput(slotInputs[time] ?? "")]),
+  );
+}
+
+function balanceLoad(numberOfSections, activeSlotData) {
   const rows = buildEmptyRows(numberOfSections);
 
   timeOrder.forEach((time) => {
-    const values = [...slotData[time]].sort((a, b) => b - a);
+    const values = [...activeSlotData[time]].sort((a, b) => b - a);
     values.forEach((value) => {
       const target = [...rows].sort((a, b) => {
         const aCount = a.slots[time] === null ? 0 : Array.isArray(a.slots[time]) ? a.slots[time].length : 1;
@@ -75,10 +91,11 @@ function balanceLoad(numberOfSections) {
 
 function App() {
   const [numberOfSections, setNumberOfSections] = useState(7);
-  const [assignments, setAssignments] = useState(() => balanceLoad(7));
+  const [slotInputs, setSlotInputs] = useState(initialSlotInputs);
+  const [assignments, setAssignments] = useState(() => balanceLoad(7, slotData));
 
   function rebalance(nextSectionCount) {
-    setAssignments(balanceLoad(nextSectionCount));
+    setAssignments(balanceLoad(nextSectionCount, buildSlotData(slotInputs)));
   }
 
   const stats = useMemo(() => {
@@ -100,24 +117,45 @@ function App() {
           </p>
         </div>
         <div className="hero-actions">
-          <label className="control-group" htmlFor="sections">
-            <span>Sections</span>
-            <select
-              id="sections"
-              value={String(numberOfSections)}
-              onChange={(event) => {
-                const nextSectionCount = Number(event.target.value);
-                setNumberOfSections(nextSectionCount);
-                rebalance(nextSectionCount);
-              }}
-            >
-              <option value="6">6</option>
-              <option value="7">7</option>
-            </select>
-          </label>
-          <button className="action-button" type="button" onClick={() => rebalance(numberOfSections)}>
-            Balance Load
-          </button>
+          <div className="slot-input-grid">
+            {timeOrder.map((time) => (
+              <label key={time} className="control-group slot-input-group" htmlFor={`slot-${time}`}>
+                <span>{time}</span>
+                <input
+                  id={`slot-${time}`}
+                  type="text"
+                  value={slotInputs[time]}
+                  placeholder="e.g. 2,2,4,3"
+                  onChange={(event) =>
+                    setSlotInputs((current) => ({
+                      ...current,
+                      [time]: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            ))}
+          </div>
+          <div className="control-row">
+            <label className="control-group" htmlFor="sections">
+              <span>Sections</span>
+              <select
+                id="sections"
+                value={String(numberOfSections)}
+                onChange={(event) => {
+                  const nextSectionCount = Number(event.target.value);
+                  setNumberOfSections(nextSectionCount);
+                  rebalance(nextSectionCount);
+                }}
+              >
+                <option value="6">6</option>
+                <option value="7">7</option>
+              </select>
+            </label>
+            <button className="action-button" type="button" onClick={() => rebalance(numberOfSections)}>
+              Balance Load
+            </button>
+          </div>
         </div>
       </header>
 
