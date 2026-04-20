@@ -136,6 +136,12 @@ input::placeholder {
   cursor: pointer;
 }
 
+.secondary-button {
+  background: #fff;
+  color: #8b4513;
+  border: 1px solid rgba(180, 83, 9, 0.35);
+}
+
 .panel {
   border: 1px solid var(--line);
   border-radius: 20px;
@@ -146,6 +152,10 @@ input::placeholder {
 
 .editor-block {
   margin-bottom: 20px;
+}
+
+.assignment-results {
+  margin-top: 16px;
 }
 
 .section-header {

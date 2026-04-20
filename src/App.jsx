@@ -96,6 +96,89 @@ function balanceLoad(numberOfSections, activeSlotData) {
   });
 }
 
+function getSectionLoad(sectionLoads, section) {
+  return sectionLoads[section] ?? 0;
+}
+
+function getTablePreferenceScore(table, partySize) {
+  let score = 0;
+
+  if (partySize === 4 && table.type !== "booth") {
+    score += 3;
+  }
+
+  if (partySize <= 2 && table.zone !== "quiet") {
+    score += 2;
+  }
+
+  score += Number(table.seats) - partySize;
+
+  return score;
+}
+
+function autoAssignTables(slotInputs, floorPlanRows) {
+  const partiesByTime = buildSlotData(slotInputs);
+  const validTables = floorPlanRows
+    .map((row) => ({
+      tableNumber: row.tableNumber.trim(),
+      seats: Number(row.seats),
+      section: row.section,
+      type: row.type,
+      zone: row.zone,
+    }))
+    .filter((row) => row.tableNumber && Number.isFinite(row.seats) && row.seats > 0 && row.section);
+
+  const sectionLoads = {};
+  const results = [];
+
+  timeOrder.forEach((time) => {
+    const usedTables = new Set();
+    const parties = [...partiesByTime[time]].sort((a, b) => b - a);
+
+    parties.forEach((partySize) => {
+      const candidates = validTables
+        .filter((table) => table.seats >= partySize && !usedTables.has(table.tableNumber))
+        .sort((a, b) => {
+          const loadDiff = getSectionLoad(sectionLoads, a.section) - getSectionLoad(sectionLoads, b.section);
+          if (loadDiff !== 0) {
+            return loadDiff;
+          }
+
+          const preferenceDiff = getTablePreferenceScore(a, partySize) - getTablePreferenceScore(b, partySize);
+          if (preferenceDiff !== 0) {
+            return preferenceDiff;
+          }
+
+          return a.tableNumber.localeCompare(b.tableNumber);
+        });
+
+      const selectedTable = candidates[0];
+
+      if (!selectedTable) {
+        results.push({
+          time,
+          partySize,
+          table: "Unassigned",
+          section: "-",
+        });
+        return;
+      }
+
+      usedTables.add(selectedTable.tableNumber);
+      sectionLoads[selectedTable.section] = getSectionLoad(sectionLoads, selectedTable.section) + partySize;
+
+      results.push({
+        time,
+        partySize,
+        table: selectedTable.tableNumber,
+        section: selectedTable.section,
+      });
+    });
+  });
+
+  return results;
+}
+
 function App() {
   const [inputs, setInputs] = useState({
     "5:30": "",
@@ -106,6 +189,7 @@ function App() {
   const [sections, setSections] = useState(7);
   const [floorPlanRows, setFloorPlanRows] = useState(initialFloorPlan);
   const [assignments, setAssignments] = useState(() => balanceLoad(7, slotData));
+  const [tableAssignments, setTableAssignments] = useState([]);
 
   function rebalance(nextSectionCount = sections, nextInputs = inputs) {
     setAssignments(balanceLoad(nextSectionCount, buildSlotData(nextInputs)));
@@ -121,6 +205,10 @@ function App() {
     const updated = { ...inputs, [time]: value };
     setInputs(updated);
     localStorage.setItem("inputs", JSON.stringify(updated));
+  }
+
+  function handleAutoAssignTables() {
+    setTableAssignments(autoAssignTables(inputs, floorPlanRows));
   }
 
   useEffect(() => {
@@ -272,7 +360,35 @@ function App() {
             <button className="action-button" type="button" onClick={() => rebalance(sections)}>
               Balance Load
             </button>
+            <button className="action-button secondary-button" type="button" onClick={handleAutoAssignTables}>
+              Auto Assign Tables
+            </button>
           </div>
+
+          {tableAssignments.length > 0 ? (
+            <div className="table-wrap assignment-results">
+              <table className="load-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Party Size</th>
+                    <th>Table</th>
+                    <th>Section</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableAssignments.map((assignment, index) => (
+                    <tr key={`${assignment.time}-${assignment.partySize}-${assignment.table}-${index}`}>
+                      <td>{assignment.time}</td>
+                      <td>{assignment.partySize}</td>
+                      <td>{assignment.table}</td>
+                      <td>{assignment.section}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </section>
 
         <div className="summary-bar">
