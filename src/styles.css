@@ -74,15 +74,6 @@ input::placeholder {
   margin-bottom: 24px;
 }
 
-.hero-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: stretch;
-  flex-wrap: wrap;
-  min-width: min(100%, 520px);
-}
-
 .control-group {
   display: grid;
   gap: 6px;
@@ -153,6 +144,20 @@ input::placeholder {
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.06);
 }
 
+.editor-block {
+  margin-bottom: 20px;
+}
+
+.section-header {
+  margin-bottom: 12px;
+}
+
+.section-header h2 {
+  margin: 0;
+  font-size: 1rem;
+  color: #2a3441;
+}
+
 .summary-bar {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -187,6 +192,18 @@ input::placeholder {
   min-width: 720px;
 }
 
+.editor-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+  background: var(--card);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.editor-table th,
+.editor-table td,
 .load-table th,
 .load-table td {
   padding: 14px 12px;
@@ -194,11 +211,24 @@ input::placeholder {
   border-bottom: 1px solid rgba(148, 163, 184, 0.18);
 }
 
+.editor-table th,
 .load-table th {
   font-size: 0.82rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-soft);
+}
+
+.editor-table td {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.editor-table input,
+.editor-table select {
+  width: 100%;
+  min-width: 88px;
+  border-radius: 10px;
+  min-height: 40px;
 }
 
 .section-name,
@@ -246,11 +276,6 @@ input::placeholder {
   .hero {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .hero-actions {
-    width: 100%;
-    min-width: 0;
   }
 
   .slot-input-grid {

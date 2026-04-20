@@ -11,6 +11,16 @@ const timeOrder = Object.keys(slotData);
 const initialSlotInputs = Object.fromEntries(
   timeOrder.map((time) => [time, slotData[time].join(",")]),
 );
+const initialFloorPlan = [
+  { tableNumber: "12", seats: "4", section: "1", type: "standard", zone: "quiet" },
+  { tableNumber: "22", seats: "4", section: "2", type: "standard", zone: "center" },
+  { tableNumber: "31", seats: "4", section: "3", type: "booth", zone: "window" },
+  { tableNumber: "35", seats: "4", section: "4", type: "booth", zone: "quiet" },
+  { tableNumber: "42", seats: "6", section: "5", type: "standard", zone: "center" },
+  { tableNumber: "1", seats: "4", section: "6", type: "standard", zone: "quiet" },
+  { tableNumber: "2", seats: "4", section: "6", type: "standard", zone: "quiet" },
+  { tableNumber: "44", seats: "6", section: "7", type: "standard", zone: "center" },
+];
 
 function buildSectionNames(numberOfSections) {
   return Array.from({ length: numberOfSections }, (_, index) => `Section ${index + 1}`);
@@ -92,10 +102,17 @@ function balanceLoad(numberOfSections, activeSlotData) {
 function App() {
   const [numberOfSections, setNumberOfSections] = useState(7);
   const [slotInputs, setSlotInputs] = useState(initialSlotInputs);
+  const [floorPlanRows, setFloorPlanRows] = useState(initialFloorPlan);
   const [assignments, setAssignments] = useState(() => balanceLoad(7, slotData));
 
   function rebalance(nextSectionCount) {
     setAssignments(balanceLoad(nextSectionCount, buildSlotData(slotInputs)));
+  }
+
+  function updateFloorPlanRow(index, field, value) {
+    setFloorPlanRows((current) =>
+      current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row)),
+    );
   }
 
   const stats = useMemo(() => {
@@ -116,7 +133,83 @@ function App() {
             Balance guest counts across the 5:30, 6:00, 6:30, and 7:00 waves.
           </p>
         </div>
-        <div className="hero-actions">
+      </header>
+
+      <main className="panel">
+        <section className="editor-block">
+          <div className="section-header">
+            <h2>Floor Plan</h2>
+          </div>
+          <div className="table-wrap">
+            <table className="editor-table">
+              <thead>
+                <tr>
+                  <th>Table #</th>
+                  <th>Seats</th>
+                  <th>Section (1-7)</th>
+                  <th>Type</th>
+                  <th>Zone</th>
+                </tr>
+              </thead>
+              <tbody>
+                {floorPlanRows.map((row, index) => (
+                  <tr key={`${row.tableNumber}-${index}`}>
+                    <td>
+                      <input
+                        type="text"
+                        value={row.tableNumber}
+                        onChange={(event) => updateFloorPlanRow(index, "tableNumber", event.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="text"
+                        value={row.seats}
+                        onChange={(event) => updateFloorPlanRow(index, "seats", event.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <select
+                        value={row.section}
+                        onChange={(event) => updateFloorPlanRow(index, "section", event.target.value)}
+                      >
+                        {Array.from({ length: 7 }, (_, sectionIndex) => String(sectionIndex + 1)).map((section) => (
+                          <option key={section} value={section}>
+                            {section}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <select
+                        value={row.type}
+                        onChange={(event) => updateFloorPlanRow(index, "type", event.target.value)}
+                      >
+                        <option value="booth">booth</option>
+                        <option value="standard">standard</option>
+                      </select>
+                    </td>
+                    <td>
+                      <select
+                        value={row.zone}
+                        onChange={(event) => updateFloorPlanRow(index, "zone", event.target.value)}
+                      >
+                        <option value="quiet">quiet</option>
+                        <option value="center">center</option>
+                        <option value="window">window</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="editor-block">
+          <div className="section-header">
+            <h2>Guest Waves</h2>
+          </div>
           <div className="slot-input-grid">
             {timeOrder.map((time) => (
               <label key={time} className="control-group slot-input-group" htmlFor={`slot-${time}`}>
@@ -156,10 +249,8 @@ function App() {
               Balance Load
             </button>
           </div>
-        </div>
-      </header>
+        </section>
 
-      <main className="panel">
         <div className="summary-bar">
           <div className="summary-card">
             <span>Total Guests</span>
