@@ -8,11 +8,6 @@ const slotData = {
 };
 
 const timeOrder = Object.keys(slotData);
-const initialSlotInputs = Object.fromEntries(
-  timeOrder.map((time) => [time, slotData[time].join(",")]),
-);
-const slotInputsStorageKey = "restaurant-host-slot-inputs";
-const sectionsStorageKey = "restaurant-host-sections";
 const initialFloorPlan = [
   { tableNumber: "12", seats: "4", section: "1", type: "standard", zone: "quiet" },
   { tableNumber: "22", seats: "4", section: "2", type: "standard", zone: "center" },
@@ -60,34 +55,6 @@ function buildSlotData(slotInputs) {
   );
 }
 
-function loadSavedSlotInputs() {
-  if (typeof window === "undefined") {
-    return initialSlotInputs;
-  }
-
-  try {
-    const saved = JSON.parse(window.localStorage.getItem(slotInputsStorageKey) ?? "null");
-    if (!saved || typeof saved !== "object") {
-      return initialSlotInputs;
-    }
-
-    return Object.fromEntries(
-      timeOrder.map((time) => [time, typeof saved[time] === "string" ? saved[time] : initialSlotInputs[time]]),
-    );
-  } catch {
-    return initialSlotInputs;
-  }
-}
-
-function loadSavedSectionCount() {
-  if (typeof window === "undefined") {
-    return 7;
-  }
-
-  const saved = window.localStorage.getItem(sectionsStorageKey);
-  return saved === "6" || saved === "7" ? Number(saved) : 7;
-}
-
 function balanceLoad(numberOfSections, activeSlotData) {
   const rows = buildEmptyRows(numberOfSections);
 
@@ -130,15 +97,18 @@ function balanceLoad(numberOfSections, activeSlotData) {
 }
 
 function App() {
-  const [numberOfSections, setNumberOfSections] = useState(loadSavedSectionCount);
-  const [slotInputs, setSlotInputs] = useState(loadSavedSlotInputs);
+  const [inputs, setInputs] = useState({
+    "5:30": "",
+    "6:00": "",
+    "6:30": "",
+    "7:00": "",
+  });
+  const [sections, setSections] = useState(7);
   const [floorPlanRows, setFloorPlanRows] = useState(initialFloorPlan);
-  const [assignments, setAssignments] = useState(() =>
-    balanceLoad(loadSavedSectionCount(), buildSlotData(loadSavedSlotInputs())),
-  );
+  const [assignments, setAssignments] = useState(() => balanceLoad(7, slotData));
 
-  function rebalance(nextSectionCount) {
-    setAssignments(balanceLoad(nextSectionCount, buildSlotData(slotInputs)));
+  function rebalance(nextSectionCount = sections, nextInputs = inputs) {
+    setAssignments(balanceLoad(nextSectionCount, buildSlotData(nextInputs)));
   }
 
   function updateFloorPlanRow(index, field, value) {
@@ -147,6 +117,32 @@ function App() {
     );
   }
 
+  function handleChange(time, value) {
+    const updated = { ...inputs, [time]: value };
+    setInputs(updated);
+    localStorage.setItem("inputs", JSON.stringify(updated));
+  }
+
+  useEffect(() => {
+    const savedInputs = localStorage.getItem("inputs");
+    const savedSections = localStorage.getItem("sections");
+
+    let nextInputs = inputs;
+    let nextSections = sections;
+
+    if (savedInputs) {
+      nextInputs = JSON.parse(savedInputs);
+      setInputs(nextInputs);
+    }
+
+    if (savedSections) {
+      nextSections = JSON.parse(savedSections);
+      setSections(nextSections);
+    }
+
+    setAssignments(balanceLoad(nextSections, buildSlotData(nextInputs)));
+  }, []);
+
   const stats = useMemo(() => {
     const grandTotal = assignments.reduce((sum, row) => sum + row.total, 0);
     return {
@@ -154,14 +150,6 @@ function App() {
       average: grandTotal / assignments.length,
     };
   }, [assignments]);
-
-  useEffect(() => {
-    window.localStorage.setItem(slotInputsStorageKey, JSON.stringify(slotInputs));
-  }, [slotInputs]);
-
-  useEffect(() => {
-    window.localStorage.setItem(sectionsStorageKey, String(numberOfSections));
-  }, [numberOfSections]);
 
   return (
     <div className="app-shell">
@@ -257,14 +245,9 @@ function App() {
                 <input
                   id={`slot-${time}`}
                   type="text"
-                  value={slotInputs[time]}
+                  value={inputs[time]}
                   placeholder="e.g. 2,2,4,3"
-                  onChange={(event) =>
-                    setSlotInputs((current) => ({
-                      ...current,
-                      [time]: event.target.value,
-                    }))
-                  }
+                  onChange={(event) => handleChange(time, event.target.value)}
                 />
               </label>
             ))}
@@ -274,18 +257,19 @@ function App() {
               <span>Sections</span>
               <select
                 id="sections"
-                value={String(numberOfSections)}
+                value={String(sections)}
                 onChange={(event) => {
-                  const nextSectionCount = Number(event.target.value);
-                  setNumberOfSections(nextSectionCount);
-                  rebalance(nextSectionCount);
+                  const value = Number(event.target.value);
+                  setSections(value);
+                  localStorage.setItem("sections", JSON.stringify(value));
+                  rebalance(value);
                 }}
               >
                 <option value="6">6</option>
                 <option value="7">7</option>
               </select>
             </label>
-            <button className="action-button" type="button" onClick={() => rebalance(numberOfSections)}>
+            <button className="action-button" type="button" onClick={() => rebalance(sections)}>
               Balance Load
             </button>
           </div>
