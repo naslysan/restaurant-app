@@ -246,6 +246,17 @@ input::placeholder {
   font-weight: 700;
 }
 
+.slot-reservations {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+}
+
+.slot-reservation {
+  min-width: 2ch;
+  font-weight: 600;
+}
+
 .row-balanced {
   background: var(--green-bg);
   color: var(--green-text);

@@ -55,8 +55,7 @@ function parseReservationEntry(entry, time, index) {
 
   const requestedTableMatch = trimmed.match(/\b(?:table|t)\s*#?\s*([a-z0-9-]+)/i);
   const requestedTable = requestedTableMatch ? requestedTableMatch[1] : "";
-  const textWithoutTable = requestedTableMatch ? trimmed.replace(requestedTableMatch[0], " ") : trimmed;
-  const partyMatch = textWithoutTable.match(/\d+/);
+  const partyMatch = trimmed.match(/\d+/);
   const partySize = partyMatch ? Number(partyMatch[0]) : NaN;
 
   if (!Number.isFinite(partySize) || partySize <= 0) {
@@ -123,7 +122,15 @@ function formatSlotReservations(reservations) {
     return "-";
   }
 
-  return reservations.map((reservation) => reservation.partySize).join(" + ");
+  return (
+    <div className="slot-reservations">
+      {reservations.map((reservation) => (
+        <div key={reservation.id} className="slot-reservation">
+          {reservation.partySize}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function compareReservationsForSectioning(a, b) {
