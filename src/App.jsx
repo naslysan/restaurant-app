@@ -434,7 +434,6 @@ function App() {
       average: assignments.length > 0 ? grandTotal / assignments.length : 0,
     };
   }, [assignments]);
-  const displayedAssignments = assignments.length > 0 ? assignments : buildEmptyRows(sections);
 
   return (
     <div className="app-shell">
@@ -617,7 +616,7 @@ function App() {
               </tr>
             </thead>
             <tbody>
-              {displayedAssignments.map((row) => (
+              {assignments.map((row) => (
                 <tr key={row.section} className={getRowTone(row.total, stats.average)}>
                   <td className="section-name">{row.section}</td>
                   {timeOrder.map((time) => (
