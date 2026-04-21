@@ -66,16 +66,15 @@ function parseReservationEntry(entry, time, index) {
   const normalized = trimmed.toLowerCase();
   const needsBooth = /\bbooth\b/.test(normalized);
   const needsQuiet = /\bquiet\b/.test(normalized);
-  const preferenceParts = [];
+
+  let preference = "";
 
   if (requestedTable) {
-    preferenceParts.push(`Table ${requestedTable}`);
-  }
-  if (needsBooth) {
-    preferenceParts.push("Booth");
-  }
-  if (needsQuiet) {
-    preferenceParts.push("Quiet");
+    preference = `table ${requestedTable}`;
+  } else if (needsBooth) {
+    preference = "booth";
+  } else if (needsQuiet) {
+    preference = "quiet";
   }
 
   return {
@@ -85,7 +84,7 @@ function parseReservationEntry(entry, time, index) {
     requestedTable,
     needsBooth,
     needsQuiet,
-    preference: preferenceParts.join(", ") || "None",
+    preference,
     preferencePriority: requestedTable ? 0 : needsBooth || needsQuiet ? 1 : 2,
     raw: trimmed,
   };
@@ -549,14 +548,14 @@ function App() {
                   id={`slot-${time}`}
                   type="text"
                   value={inputs[time]}
-                  placeholder="e.g. 4 booth, 2 quiet, 6 table 42"
+                  placeholder="e.g. 4 booth, 2 quiet, 4 table 12"
                   onChange={(event) => handleChange(time, event.target.value)}
                 />
               </label>
             ))}
           </div>
           <p className="input-help">
-            Enter comma-separated reservations. Start with party size, then add optional preferences like <code>booth</code>, <code>quiet</code>, or <code>table 35</code>.
+            Enter comma-separated reservations. Examples: <code>4 booth</code>, <code>2 quiet</code>, <code>4 table 12</code>.
           </p>
           <div className="control-row">
             <label className="control-group" htmlFor="sections">
