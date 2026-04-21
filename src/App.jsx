@@ -68,13 +68,17 @@ function parseReservationEntry(entry, time, index) {
   const needsQuiet = /\bquiet\b/.test(normalized);
 
   let preference = "";
+  let preferencePriority = 3;
 
   if (requestedTable) {
     preference = `table ${requestedTable}`;
+    preferencePriority = 0;
   } else if (needsBooth) {
     preference = "booth";
+    preferencePriority = 1;
   } else if (needsQuiet) {
     preference = "quiet";
+    preferencePriority = 2;
   }
 
   return {
@@ -85,8 +89,7 @@ function parseReservationEntry(entry, time, index) {
     needsBooth,
     needsQuiet,
     preference,
-    preferencePriority: requestedTable ? 0 : needsBooth || needsQuiet ? 1 : 2,
-    raw: trimmed,
+    preferencePriority,
   };
 }
 
@@ -146,87 +149,49 @@ function compareReservationsForTables(a, b) {
   return a.id.localeCompare(b.id);
 }
 
-function findPairOptions(tables, partySize) {
-  const pairs = [];
-
-  for (let leftIndex = 0; leftIndex < tables.length; leftIndex += 1) {
-    for (let rightIndex = leftIndex + 1; rightIndex < tables.length; rightIndex += 1) {
-      const pair = [tables[leftIndex], tables[rightIndex]];
-      const totalSeats = pair[0].seats + pair[1].seats;
-      if (totalSeats >= partySize) {
-        pairs.push(pair);
-      }
-    }
-  }
-
-  return pairs;
-}
-
 function sectionSupportsReservation(sectionTables, reservation) {
-  const requestedTable = reservation.requestedTable
-    ? sectionTables.find((table) => table.tableNumber.toLowerCase() === reservation.requestedTable.toLowerCase())
-    : null;
-
   if (reservation.requestedTable) {
-    if (!requestedTable) {
-      return false;
-    }
-    if (requestedTable.seats >= reservation.partySize) {
-      return true;
-    }
-    return sectionTables.some(
-      (table) => table.tableNumber !== requestedTable.tableNumber && requestedTable.seats + table.seats >= reservation.partySize,
+    const requestedTable = sectionTables.find(
+      (table) => table.tableNumber.toLowerCase() === reservation.requestedTable.toLowerCase(),
     );
+    return Boolean(requestedTable && requestedTable.seats >= reservation.partySize);
   }
 
-  if (sectionTables.some((table) => table.seats >= reservation.partySize)) {
-    return true;
-  }
-
-  return findPairOptions(sectionTables, reservation.partySize).length > 0;
+  return sectionTables.some((table) => table.seats >= reservation.partySize);
 }
 
 function getSectionPreferenceFit(sectionTables, reservation) {
   if (reservation.requestedTable) {
-    const table = sectionTables.find((item) => item.tableNumber.toLowerCase() === reservation.requestedTable.toLowerCase());
-    return table ? 3 : 0;
+    return sectionTables.some(
+      (table) => table.tableNumber.toLowerCase() === reservation.requestedTable.toLowerCase() && table.seats >= reservation.partySize,
+    )
+      ? 3
+      : 0;
   }
 
-  let fit = 1;
-
   if (reservation.needsBooth) {
-    fit += sectionTables.some((table) => table.type === "booth" && table.seats >= reservation.partySize) ? 1 : 0;
+    return sectionTables.some((table) => table.type === "booth" && table.seats >= reservation.partySize) ? 2 : 0;
   }
 
   if (reservation.needsQuiet) {
-    fit += sectionTables.some((table) => table.zone === "quiet" && table.seats >= reservation.partySize) ? 1 : 0;
+    return sectionTables.some((table) => table.zone === "quiet" && table.seats >= reservation.partySize) ? 1 : 0;
   }
 
-  return fit;
+  return 1;
 }
 
 function chooseSectionForReservation(rows, reservation, tablesBySection) {
   const candidates = rows
     .map((row) => {
       const sectionTables = tablesBySection[row.sectionNumber] ?? [];
-      const supportsReservation = sectionSupportsReservation(sectionTables, reservation);
-      const preferenceFit = getSectionPreferenceFit(sectionTables, reservation);
-      const slotReservations = row.slots[reservation.time] ?? [];
-
       return {
         row,
-        supportsReservation,
-        preferenceFit,
-        slotCount: slotReservations.length,
+        supportsReservation: sectionSupportsReservation(sectionTables, reservation),
+        preferenceFit: getSectionPreferenceFit(sectionTables, reservation),
+        slotCount: row.slots[reservation.time].length,
       };
     })
-    .filter((candidate) => {
-      if (!reservation.requestedTable) {
-        return true;
-      }
-
-      return candidate.preferenceFit > 0;
-    })
+    .filter((candidate) => !reservation.requestedTable || candidate.preferenceFit > 0)
     .sort((a, b) => {
       if (a.supportsReservation !== b.supportsReservation) {
         return Number(b.supportsReservation) - Number(a.supportsReservation);
@@ -243,7 +208,7 @@ function chooseSectionForReservation(rows, reservation, tablesBySection) {
       return a.row.sectionNumber.localeCompare(b.row.sectionNumber, undefined, { numeric: true });
     });
 
-  return candidates[0]?.row ?? null;
+  return candidates[0]?.row ?? rows[0];
 }
 
 function assignReservationsToSections(numberOfSections, slotInputs, floorPlanRows) {
@@ -261,7 +226,7 @@ function assignReservationsToSections(numberOfSections, slotInputs, floorPlanRow
     const reservations = [...reservationsByTime[time]].sort(compareReservationsForSectioning);
 
     reservations.forEach((reservation) => {
-      const targetRow = chooseSectionForReservation(rows, reservation, tablesBySection) ?? rows[0];
+      const targetRow = chooseSectionForReservation(rows, reservation, tablesBySection);
       targetRow.slots[time] = [...targetRow.slots[time], { ...reservation, sectionNumber: targetRow.sectionNumber }];
       targetRow.total += reservation.partySize;
     });
@@ -275,77 +240,57 @@ function assignReservationsToSections(numberOfSections, slotInputs, floorPlanRow
   });
 }
 
-function getAllocationPreferenceScore(reservation, tables) {
-  let score = 0;
-
+function getPreferredTables(availableTables, reservation) {
   if (reservation.requestedTable) {
-    score += tables.some((table) => table.tableNumber.toLowerCase() === reservation.requestedTable.toLowerCase()) ? 8 : 0;
+    return availableTables.filter(
+      (table) => table.tableNumber.toLowerCase() === reservation.requestedTable.toLowerCase(),
+    );
   }
 
   if (reservation.needsBooth) {
-    score += tables.some((table) => table.type === "booth") ? 4 : 0;
+    const boothTables = availableTables.filter((table) => table.type === "booth");
+    return boothTables.length > 0 ? boothTables : availableTables;
   }
 
   if (reservation.needsQuiet) {
-    score += tables.some((table) => table.zone === "quiet") ? 4 : 0;
+    const quietTables = availableTables.filter((table) => table.zone === "quiet");
+    return quietTables.length > 0 ? quietTables : availableTables;
   }
 
-  return score;
+  return availableTables;
 }
 
-function findBestTableAllocation(reservation, availableTables) {
-  if (availableTables.length === 0) {
+function sortTablesBySizeFit(tables, partySize) {
+  return [...tables].sort((a, b) => {
+    const aDelta = a.seats - partySize;
+    const bDelta = b.seats - partySize;
+
+    if (aDelta !== bDelta) {
+      return aDelta - bDelta;
+    }
+
+    return a.tableNumber.localeCompare(b.tableNumber, undefined, { numeric: true });
+  });
+}
+
+function findBestTableAssignment(reservation, availableTables) {
+  const preferredTables = getPreferredTables(availableTables, reservation);
+  const fittingPreferred = preferredTables.filter((table) => table.seats >= reservation.partySize);
+
+  if (fittingPreferred.length > 0) {
+    return sortTablesBySizeFit(fittingPreferred, reservation.partySize)[0];
+  }
+
+  if (reservation.requestedTable) {
     return null;
   }
 
-  const singleOptions = availableTables
-    .filter((table) => table.seats >= reservation.partySize)
-    .map((table) => ({
-      tables: [table],
-      seats: table.seats,
-      preferenceScore: getAllocationPreferenceScore(reservation, [table]),
-    }));
+  const fittingAny = availableTables.filter((table) => table.seats >= reservation.partySize);
+  if (fittingAny.length === 0) {
+    return null;
+  }
 
-  const pairOptions = findPairOptions(availableTables, reservation.partySize).map((pair) => ({
-    tables: pair,
-    seats: pair[0].seats + pair[1].seats,
-    preferenceScore: getAllocationPreferenceScore(reservation, pair),
-  }));
-
-  const requestedTableOnly = reservation.requestedTable
-    ? [...singleOptions, ...pairOptions].filter((option) =>
-        option.tables.some((table) => table.tableNumber.toLowerCase() === reservation.requestedTable.toLowerCase()),
-      )
-    : [];
-
-  const prioritizedPool = reservation.requestedTable
-    ? requestedTableOnly
-    : reservation.preferencePriority < 2
-      ? [...singleOptions, ...pairOptions].filter((option) => option.preferenceScore > 0)
-      : [...singleOptions, ...pairOptions];
-
-  const fallbackPool = reservation.requestedTable ? [] : [...singleOptions, ...pairOptions];
-  const options = prioritizedPool.length > 0 ? prioritizedPool : fallbackPool;
-
-  return options.sort((a, b) => {
-    if (a.preferenceScore !== b.preferenceScore) {
-      return b.preferenceScore - a.preferenceScore;
-    }
-    if (a.tables.length !== b.tables.length) {
-      return a.tables.length - b.tables.length;
-    }
-    if (a.seats !== b.seats) {
-      return a.seats - b.seats;
-    }
-    return a.tables
-      .map((table) => table.tableNumber)
-      .join("/")
-      .localeCompare(
-        b.tables.map((table) => table.tableNumber).join("/"),
-        undefined,
-        { numeric: true },
-      );
-  })[0] ?? null;
+  return sortTablesBySizeFit(fittingAny, reservation.partySize)[0];
 }
 
 function assignTablesFromSections(sectionAssignments, floorPlanRows, numberOfSections) {
@@ -364,9 +309,9 @@ function assignTablesFromSections(sectionAssignments, floorPlanRows, numberOfSec
       const availableTables = validTables.filter(
         (table) => table.section === reservation.sectionNumber && !usedTables.has(table.tableNumber),
       );
-      const allocation = findBestTableAllocation(reservation, availableTables);
+      const selectedTable = findBestTableAssignment(reservation, availableTables);
 
-      if (!allocation) {
+      if (!selectedTable) {
         results.push({
           section: reservation.sectionNumber,
           time,
@@ -377,14 +322,13 @@ function assignTablesFromSections(sectionAssignments, floorPlanRows, numberOfSec
         return;
       }
 
-      allocation.tables.forEach((table) => usedTables.add(table.tableNumber));
-
+      usedTables.add(selectedTable.tableNumber);
       results.push({
         section: reservation.sectionNumber,
         time,
         party: reservation.partySize,
         preference: reservation.preference,
-        table: allocation.tables.map((table) => table.tableNumber).join(" + "),
+        table: selectedTable.tableNumber,
       });
     });
   });
@@ -408,20 +352,22 @@ function App() {
   const [sections, setSections] = useState(7);
   const [floorPlanRows, setFloorPlanRows] = useState(initialFloorPlan);
   const [assignments, setAssignments] = useState(() => assignReservationsToSections(7, defaultInputs, initialFloorPlan));
-  const [tableAssignments, setTableAssignments] = useState(() =>
-    assignTablesFromSections(assignReservationsToSections(7, defaultInputs, initialFloorPlan), initialFloorPlan, 7),
-  );
+  const [tableAssignments, setTableAssignments] = useState([]);
 
-  function rebuild(nextSectionCount = sections, nextInputs = inputs, nextFloorPlanRows = floorPlanRows) {
+  function rebalance(nextSectionCount = sections, nextInputs = inputs, nextFloorPlanRows = floorPlanRows) {
     const nextAssignments = assignReservationsToSections(nextSectionCount, nextInputs, nextFloorPlanRows);
     setAssignments(nextAssignments);
+    return nextAssignments;
+  }
+
+  function handleAutoAssignTables(nextAssignments = assignments, nextFloorPlanRows = floorPlanRows, nextSectionCount = sections) {
     setTableAssignments(assignTablesFromSections(nextAssignments, nextFloorPlanRows, nextSectionCount));
   }
 
   function updateFloorPlanRow(index, field, value) {
     setFloorPlanRows((current) => {
       const nextRows = current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row));
-      rebuild(sections, inputs, nextRows);
+      rebalance(sections, inputs, nextRows);
       return nextRows;
     });
   }
@@ -430,7 +376,7 @@ function App() {
     const updated = { ...inputs, [time]: value };
     setInputs(updated);
     localStorage.setItem("inputs", JSON.stringify(updated));
-    rebuild(sections, updated, floorPlanRows);
+    rebalance(sections, updated, floorPlanRows);
   }
 
   useEffect(() => {
@@ -439,10 +385,11 @@ function App() {
 
     const nextInputs = savedInputs ? JSON.parse(savedInputs) : defaultInputs;
     const nextSections = savedSections ? JSON.parse(savedSections) : 7;
+    const nextAssignments = assignReservationsToSections(nextSections, nextInputs, initialFloorPlan);
 
     setInputs(nextInputs);
     setSections(nextSections);
-    rebuild(nextSections, nextInputs, initialFloorPlan);
+    setAssignments(nextAssignments);
   }, []);
 
   const stats = useMemo(() => {
@@ -460,7 +407,7 @@ function App() {
           <p className="eyebrow">Restaurant Seating</p>
           <h1>Host Assignment Flow</h1>
           <p className="hero-copy">
-            Parse reservations from each time slot, balance them across sections, then assign tables by floor plan and guest preference.
+            Balance guests across sections first, then assign the closest matching table inside each section using host priority rules.
           </p>
         </div>
       </header>
@@ -567,39 +514,48 @@ function App() {
                   const value = Number(event.target.value);
                   setSections(value);
                   localStorage.setItem("sections", JSON.stringify(value));
-                  rebuild(value, inputs, floorPlanRows);
+                  rebalance(value, inputs, floorPlanRows);
                 }}
               >
                 <option value="6">6</option>
                 <option value="7">7</option>
               </select>
             </label>
+            <button
+              className="action-button secondary-button"
+              type="button"
+              onClick={() => handleAutoAssignTables()}
+            >
+              Auto Assign Tables
+            </button>
           </div>
 
-          <div className="table-wrap assignment-results">
-            <table className="load-table">
-              <thead>
-                <tr>
-                  <th>Section</th>
-                  <th>Time</th>
-                  <th>Party</th>
-                  <th>Preference</th>
-                  <th>Table</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tableAssignments.map((assignment, index) => (
-                  <tr key={`${assignment.section}-${assignment.time}-${assignment.party}-${assignment.table}-${index}`}>
-                    <td>{assignment.section}</td>
-                    <td>{assignment.time}</td>
-                    <td>{assignment.party}</td>
-                    <td>{assignment.preference}</td>
-                    <td>{assignment.table}</td>
+          {tableAssignments.length > 0 ? (
+            <div className="table-wrap assignment-results">
+              <table className="load-table">
+                <thead>
+                  <tr>
+                    <th>Section</th>
+                    <th>Time</th>
+                    <th>Party</th>
+                    <th>Preference</th>
+                    <th>Table</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {tableAssignments.map((assignment, index) => (
+                    <tr key={`${assignment.section}-${assignment.time}-${assignment.party}-${assignment.table}-${index}`}>
+                      <td>{assignment.section}</td>
+                      <td>{assignment.time}</td>
+                      <td>{assignment.party}</td>
+                      <td>{assignment.preference}</td>
+                      <td>{assignment.table}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </section>
 
         <div className="summary-bar">
