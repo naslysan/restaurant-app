@@ -210,6 +210,9 @@ function sortSectionCandidates(a, b) {
   if (a.preferenceFit !== b.preferenceFit) {
     return b.preferenceFit - a.preferenceFit;
   }
+  if (a.slotCount !== b.slotCount) {
+    return a.slotCount - b.slotCount;
+  }
   if (a.row.total !== b.row.total) {
     return a.row.total - b.row.total;
   }
