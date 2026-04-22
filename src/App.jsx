@@ -309,6 +309,10 @@ function sortTablesBySizeFit(tables, partySize) {
 }
 
 function findBestTableAssignment(reservation, availableTables) {
+  if (availableTables.length === 0) {
+    return null;
+  }
+
   const preferredTables = getPreferredTables(availableTables, reservation);
   const fittingPreferred = preferredTables.filter((table) => table.seats >= reservation.partySize);
 
@@ -316,16 +320,16 @@ function findBestTableAssignment(reservation, availableTables) {
     return sortTablesBySizeFit(fittingPreferred, reservation.partySize)[0];
   }
 
-  if (reservation.requestedTable) {
-    return null;
-  }
-
   const fittingAny = availableTables.filter((table) => table.seats >= reservation.partySize);
-  if (fittingAny.length === 0) {
-    return null;
+  if (fittingAny.length > 0) {
+    return sortTablesBySizeFit(fittingAny, reservation.partySize)[0];
   }
 
-  return sortTablesBySizeFit(fittingAny, reservation.partySize)[0];
+  if (preferredTables.length > 0) {
+    return sortTablesBySizeFit(preferredTables, reservation.partySize)[0];
+  }
+
+  return sortTablesBySizeFit(availableTables, reservation.partySize)[0];
 }
 
 function assignTablesFromSections(sectionAssignments, floorPlanRows, numberOfSections) {
@@ -342,19 +346,15 @@ function assignTablesFromSections(sectionAssignments, floorPlanRows, numberOfSec
       .sort(compareReservationsForTables);
 
     reservations.forEach((reservation) => {
-      const availableTables = validTables.filter(
+      const sectionTables = validTables.filter(
         (table) => table.section === reservation.sectionNumber && !usedTables.has(table.tableNumber),
       );
-      const selectedTable = findBestTableAssignment(reservation, availableTables);
+      const allAvailableTables = validTables.filter((table) => !usedTables.has(table.tableNumber));
+      const selectedTable =
+        findBestTableAssignment(reservation, sectionTables) ??
+        findBestTableAssignment(reservation, allAvailableTables);
 
       if (!selectedTable) {
-        results.push({
-          section: reservation.sectionNumber,
-          time,
-          party: reservation.partySize,
-          preference: reservation.preference,
-          table: "Unassigned",
-        });
         return;
       }
 
