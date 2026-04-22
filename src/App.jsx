@@ -333,9 +333,10 @@ function assignTablesFromSections(sectionAssignments, floorPlanRows, numberOfSec
     (table) => Number(table.section) >= 1 && Number(table.section) <= numberOfSections,
   );
   const results = [];
+  const usedTablesByTime = Object.fromEntries(timeOrder.map((time) => [time, new Set()]));
 
   timeOrder.forEach((time) => {
-    const usedTables = new Set();
+    const usedTables = usedTablesByTime[time];
     const reservations = sectionAssignments
       .flatMap((row) => row.slots[time])
       .sort(compareReservationsForTables);
