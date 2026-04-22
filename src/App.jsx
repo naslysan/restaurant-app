@@ -187,45 +187,35 @@ function getSectionPreferenceFit(sectionTables, reservation) {
   return 1;
 }
 
-function getMaxReservationsForSectionTime(sectionTables) {
-  return Math.min(2, sectionTables.length);
-}
-
-function buildSectionCandidate(row, reservation, tablesBySection) {
-  const sectionTables = tablesBySection[row.sectionNumber] ?? [];
-
-  return {
-    row,
-    maxReservations: getMaxReservationsForSectionTime(sectionTables),
-    supportsReservation: sectionSupportsReservation(sectionTables, reservation),
-    preferenceFit: getSectionPreferenceFit(sectionTables, reservation),
-    slotCount: row.slots[reservation.time].length,
-  };
-}
-
-function sortSectionCandidates(a, b) {
-  if (a.supportsReservation !== b.supportsReservation) {
-    return Number(b.supportsReservation) - Number(a.supportsReservation);
-  }
-  if (a.preferenceFit !== b.preferenceFit) {
-    return b.preferenceFit - a.preferenceFit;
-  }
-  if (a.slotCount !== b.slotCount) {
-    return a.slotCount - b.slotCount;
-  }
-  if (a.row.total !== b.row.total) {
-    return a.row.total - b.row.total;
-  }
-  return a.row.sectionNumber.localeCompare(b.row.sectionNumber, undefined, { numeric: true });
-}
-
-function chooseSectionForReservation(rows, reservation, tablesBySection, maxSlotCount) {
+function chooseSectionForReservation(rows, reservation, tablesBySection) {
   const candidates = rows
-    .map((row) => buildSectionCandidate(row, reservation, tablesBySection))
-    .filter((candidate) => candidate.maxReservations >= maxSlotCount && candidate.slotCount < maxSlotCount)
-    .sort(sortSectionCandidates);
+    .map((row) => {
+      const sectionTables = tablesBySection[row.sectionNumber] ?? [];
+      return {
+        row,
+        supportsReservation: sectionSupportsReservation(sectionTables, reservation),
+        preferenceFit: getSectionPreferenceFit(sectionTables, reservation),
+        slotCount: row.slots[reservation.time].length,
+      };
+    })
+    .filter((candidate) => !reservation.requestedTable || candidate.preferenceFit > 0)
+    .sort((a, b) => {
+      if (a.supportsReservation !== b.supportsReservation) {
+        return Number(b.supportsReservation) - Number(a.supportsReservation);
+      }
+      if (a.preferenceFit !== b.preferenceFit) {
+        return b.preferenceFit - a.preferenceFit;
+      }
+      if (a.slotCount !== b.slotCount) {
+        return a.slotCount - b.slotCount;
+      }
+      if (a.row.total !== b.row.total) {
+        return a.row.total - b.row.total;
+      }
+      return a.row.sectionNumber.localeCompare(b.row.sectionNumber, undefined, { numeric: true });
+    });
 
-  return candidates[0]?.row ?? null;
+  return candidates[0]?.row ?? rows[0];
 }
 
 function placeReservationInRow(row, reservation) {
@@ -246,26 +236,9 @@ function assignReservationsToSections(numberOfSections, slotInputs, floorPlanRow
 
   timeOrder.forEach((time) => {
     const reservations = [...reservationsByTime[time]].sort(compareReservationsForSectioning);
-    const remainingReservations = [];
 
     reservations.forEach((reservation) => {
-      const targetRow = chooseSectionForReservation(rows, reservation, tablesBySection, 1);
-
-      if (!targetRow) {
-        remainingReservations.push(reservation);
-        return;
-      }
-
-      placeReservationInRow(targetRow, reservation);
-    });
-
-    remainingReservations.forEach((reservation) => {
-      const targetRow = chooseSectionForReservation(rows, reservation, tablesBySection, 2);
-
-      if (!targetRow) {
-        return;
-      }
-
+      const targetRow = chooseSectionForReservation(rows, reservation, tablesBySection);
       placeReservationInRow(targetRow, reservation);
     });
   });
